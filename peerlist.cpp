@@ -48,7 +48,7 @@ void PeerList::fillData()
         model.appendRow(list);
     }
 
-
+    clientListView->viewport()->update();
 }
 
 void PeerList::jsonToVector(boost::json::object &json)

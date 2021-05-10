@@ -43,7 +43,7 @@ public:
     virtual ~PeerSession();
     void doPostAccept();
 signals:
-    void connected(std::unique_ptr<net::ip::tcp::socket> &socket);
+    void connected(std::unique_ptr<net::ip::tcp::socket> &socket, const std::string username);
 };
 
 #endif // PEERSESSION_H

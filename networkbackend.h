@@ -48,7 +48,7 @@ class NetworkBackend: public QObject
     void getClientList();
     boost::json::object createDownGradeRequest(const std::string username = "");
     void sendDowngrade();
-    boost::json::object toJson(size_t size);
+    std::vector<boost::json::object> toJson(size_t size);
     std::string jsonToString(boost::json::object json);
     void clearBuffer();
     void askPeerResponse(boost::json::object &response);
@@ -76,7 +76,7 @@ public:
 signals:
     void peerListUpdated(boost::json::object json);
     void connectedToServerSignal(const std::string endpoint);
-    void connected(std::unique_ptr<net::ip::tcp::socket> &socket);
+    void connected(std::unique_ptr<net::ip::tcp::socket> &socket, const std::string username);
 };
 
 #endif // NETWORKBACKEND_H

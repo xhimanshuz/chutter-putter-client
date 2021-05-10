@@ -30,14 +30,16 @@ void MessageTab::signalSetup()
             return ;
         sendText(enterBoxEdit.text());
         doRead();
-        std::cout <<"[>>] SENT: "<< enterBoxEdit.text().toStdString() <<std::endl;
         enterBoxEdit.clear();
     });
 }
 
 void MessageTab::sendText(QString msg)
 {
-    socket->write_some(boost::asio::buffer(enterBoxEdit.text().toStdString().data(), enterBoxEdit.text().size()));
+    socket->write_some(boost::asio::buffer(msg.toUtf8().data(), sizeof(msg.toUtf8().data())));
+    std::cout << "[>>] SENT: "<< msg.toStdString()<<std::endl;;
+    chatBoxEdit.append(QString("<div align='right'><b>%0</b></div>").arg(msg));
+    chatBoxEdit.viewport()->update();
 }
 
 void MessageTab::onRead(boost::system::error_code ec, size_t size)
@@ -45,9 +47,9 @@ void MessageTab::onRead(boost::system::error_code ec, size_t size)
     std::cout << "onRead: "<< buff <<std::endl;
     if(ec)
         std::cout << "[x] Error in Messange::onRead"<< ec.message()<< std::endl;
-    std::string msg(buff, size);
-    chatBoxEdit.appendPlainText(QString(msg.data()));
-    chatBoxEdit.update();
+    QString msg = QString::fromUtf8(buff, size);
+    chatBoxEdit.append(QString("<div align='left'><b>%0</b></div>").arg(msg));
+    chatBoxEdit.viewport()->update();
     memset(buff, 0, sizeof(buff));
     doRead();
 

@@ -25,6 +25,7 @@ void Ui::render()
 void Ui::addMessangerTab(const QString &tabname)
 {
     tabWidget.addTab( mt, tabname);
+    tabWidget.hide();
 }
 
 void Ui::setUpSignals()
@@ -41,9 +42,12 @@ void Ui::setUpSignals()
 
     connect(&pl, &PeerList::peerSelected, net.get(), &NetworkBackend::doAskPeer);
 
-    connect(net.get(), &NetworkBackend::connected, [&](std::unique_ptr<net::ip::tcp::socket> &socket) {
+    connect(net.get(), &NetworkBackend::connected, [&](std::unique_ptr<net::ip::tcp::socket> &socket, const std::string username) {
         std::cout << "[!] Socket Transfered, "<< socket->remote_endpoint()<< std::endl;
         mt->setSocket(std::move(socket));
+        mt->username = username.data();
+        tabWidget.setTabText(0, username.data());
+        tabWidget.show();
 //        tabWidget.addTab( new MessageTab(std::move(socket), net.get(), this), "connected");
     });
 }

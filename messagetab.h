@@ -6,7 +6,7 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QPushButton>
-#include <QPlainTextEdit>
+#include <QTextEdit>
 #include <QLineEdit>
 #include <QDebug>
 
@@ -17,7 +17,7 @@ class MessageTab: public QWidget
     Q_OBJECT
 
     char buff[1024];
-    QPlainTextEdit chatBoxEdit;
+    QTextEdit chatBoxEdit;
     QLineEdit enterBoxEdit;
     QPushButton sendButton;
     QVBoxLayout *mainLayout;
@@ -29,6 +29,7 @@ class MessageTab: public QWidget
     void onRead(boost::system::error_code ec, size_t size);
     void doRead();
 public:
+    QString username;
     void setSocket(std::unique_ptr<net::ip::tcp::socket> _socket);
     MessageTab(std::unique_ptr<net::ip::tcp::socket> _socket, NetworkBackend *_net, QWidget *parent = nullptr);
 };

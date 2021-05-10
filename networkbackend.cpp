@@ -4,11 +4,13 @@ NetworkBackend::NetworkBackend(const std::string& ip, unsigned short port, QObje
     serverConnectSocket{*ioc},
     resolver{*ioc}, server_ip{ip}, server_port{port}
 {
+    clearBuffer();
 }
 
 NetworkBackend::~NetworkBackend()
 {
     std::cout << "[~] NETWORKBACKEND EXIT"<<std::endl;
+    serverConnectSocket.close();
 }
 
 void NetworkBackend::onConnect()
@@ -16,6 +18,7 @@ void NetworkBackend::onConnect()
     serverConnectSocket.set_option(net::ip::tcp::socket::reuse_address(true));
     sendDowngrade();
     doAsyncRead();
+    //    getClientList();
 }
 
 void NetworkBackend::iocPool()
@@ -35,7 +38,7 @@ void NetworkBackend::handleResponse(boost::json::object &response)
         else if(response_type == "clientList")
             clientListReceived(response);
         else if(response_type == "downgrade")
-            getClientList();
+            std::cout << "[!] Downgrade reponse received!"<<std::endl;
         else
             std::cout << "Unknow Response "<< response_type << std::endl;
 
@@ -47,7 +50,6 @@ void NetworkBackend::handleResponse(boost::json::object &response)
 void NetworkBackend::doAsyncRead()
 {
     std::cout << "[!] "<< __FUNCTION__ << std::endl;
-//    serverConnectSocket.async_read_some(net::buffer(_buffer), std::bind(&NetworkBackend::onRead, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
     serverConnectSocket.async_read_some(net::buffer(_buffer), [&](boost::system::error_code ec, size_t size)
     {
         onRead(ec, size);
@@ -66,15 +68,18 @@ void NetworkBackend::onRead(boost::system::error_code ec, size_t size)
     if(!_buffer[0])
         return ;
 
-    auto json = toJson(size);
-    auto type = json["type"].as_string();
-    if(type == "request")
-        handleRequest(json);
-    else if(type == "response")
-        handleResponse(json);
-    else
-        std::cout << "[x] Invalid Json type"<< std::endl;
+    auto jsons = toJson(size);
 
+    for(auto& json: jsons)
+    {
+        auto type = json["type"].as_string();
+        if(type == "request")
+            handleRequest(json);
+        else if(type == "response")
+            handleResponse(json);
+        else
+            std::cout << "[x] Invalid Json type"<< std::endl;
+    }
 }
 
 void NetworkBackend::getClientList()
@@ -105,17 +110,28 @@ void NetworkBackend::sendDowngrade()
     doAsyncWrite(json);
 }
 
-boost::json::object NetworkBackend::toJson(size_t size)
+std::vector<boost::json::object> NetworkBackend::toJson(size_t size)
 {
-    boost::json::object json{{"type", "invalid"}};
+    std::string buffer(_buffer);
+    std::vector<boost::json::object> jsons;
+
     try {
-        json = boost::json::parse(std::string(_buffer, 0, size)).get_object();
+        boost::json::object json{{"type", "invalid"}};
+        size_t pos = 0;
+        std::string split;
+        while((pos = buffer.find("\n"))!= std::string::npos)
+        {
+            split = buffer.substr(0, pos);
+            json = boost::json::parse(split).get_object();
+            jsons.push_back(json);
+            buffer.erase(0, pos+1);
+        }
         clearBuffer();
     }
     catch(std::exception& ex) {
         std::cout <<"Exception Occured while parsing json "<< ex.what() << std::endl;
     }
-    return json;
+    return jsons;
 }
 
 std::string NetworkBackend::jsonToString(boost::json::object json)
@@ -133,13 +149,13 @@ void NetworkBackend::askPeerResponse(boost::json::object &response)
     auto data = response["data"].get_object();
     switch (data["status"].get_int64())
     {
-        case ASK_PEER::ACCEPTED:
-            doPostAcceptJson(data);
-            break;
-        case ASK_PEER::REJECTED:
-            break;
-        default:
-            break;
+    case ASK_PEER::ACCEPTED:
+        doPostAcceptJson(data);
+        break;
+    case ASK_PEER::REJECTED:
+        break;
+    default:
+        break;
     }
 }
 
@@ -151,7 +167,6 @@ void NetworkBackend::doPostAcceptJson(boost::json::object &data)
 
 void NetworkBackend::doAsyncWrite(const std::string buffer)
 {
-    serverConnectSocket.wait(serverConnectSocket.wait_write);
     serverConnectSocket.async_write_some(net::buffer(buffer.data(), buffer.size()), std::bind(&NetworkBackend::onWrite, this, std::placeholders::_1, std::placeholders::_2));
     std::cout <<"[>>] SENDING: "<< buffer <<std::endl;
 }
@@ -241,12 +256,11 @@ void NetworkBackend::doAskPeer(const std::string &username)
 void NetworkBackend::doPostAccept(std::array<std::string, 5> arr)
 {
     std::cout << " -- doPostAccept"<< std::endl;
-//    serverConnectSocket.shutdown(net::ip::tcp::socket::shutdown_both);
-//    serverConnectSocket.close();
+
     auto  peer = std::make_shared<PeerSession>(ioc, arr, serverConnectSocket.local_endpoint().port());
-    connect(peer.get(), &PeerSession::connected, [&](std::unique_ptr<net::ip::tcp::socket> &socket)
+    connect(peer.get(), &PeerSession::connected, [&](std::unique_ptr<net::ip::tcp::socket> &socket, const std::string username)
     {
-        emit connected(socket);
+        emit connected(socket, username);
     });
     peer->doPostAccept();
 
@@ -287,23 +301,22 @@ void NetworkBackend::setUsername(const std::string &_username)
 
 void  NetworkBackend::connectToServer(const std::string& ip, unsigned short port)
 {
-//    while(!serverConnectSocket.is_open())
-//    {
-//        try
-//        {
+    while(!serverConnectSocket.is_open())
+    {
+        try
+        {
             auto endpoint = *resolver.resolve(ip, std::to_string(port));
             serverConnectSocket.connect(endpoint);
             std::cout <<"[!] SUCCESSFULY CONNECTED TO SERVER: "<< ip<<":"<<port<<std::endl;
-//            emit connectedToServerSignal(QString("")); //(serverConnectSocket.remote_endpoint().address().to_string()+":"+std::to_string(serverConnectSocket.remote_endpoint().port())
             onConnect();
             ioc->run();
-//            return;
-//        }
-//        catch(std::exception &ex)
-//        {
-//            std::cerr<< "Exception Occured with connecting Server: "<<ip<<":"<<port<<", "<< ex.what() << std::endl;
-//            std::this_thread::sleep_for(5s);
-//            serverConnectSocket.close();
-//        }
-//    }
+            return;
+        }
+        catch(std::exception &ex)
+        {
+            std::cerr<< "Exception Occured with connecting Server: "<<ip<<":"<<port<<", "<< ex.what() << std::endl;
+            std::this_thread::sleep_for(5s);
+            serverConnectSocket.close();
+        }
+    }
 }
